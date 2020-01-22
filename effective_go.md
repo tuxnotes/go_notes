@@ -562,6 +562,71 @@ p := new(SyncedBuffer)  // type *SyncedBuffer
 var v SyncedBuffer      // type  SyncedBuffer
 ```
 ## 8.2 Constructors and composite literals
+有时候零值不够好，需要一个初始化构造函数，下面的代码示例来自于os包
+
+```go
+func NewFile(fd int, name string) *File {
+    if fd < 0 {
+        return nil
+    }
+    f := new(File)
+    f.fd = fd
+    f.name = name
+    f.dirinfo = nil
+    f.nepipe = 0
+    return f
+}
+```
+上面的代码显得过于冗长，我们可以通过*composite literal*来简化它。*composite literal*是一个表达式，该表达式在每次求值是都会创建新的实例。
+
+```go
+func NewFile(fd int, name string) *File {
+    if fd < 0 {
+        return nil
+    }
+    f := File{fd, name, nil, 0}
+    return &f
+}
+```
+需要指出的是，与C不同，返回局部变量的地址是完全没有问题的。该变量关联的内存中的数据在函数返回后依然存在。实际上，每次获取一个*composite literal*的地址时，都会将一个新的实例分配内存，影刺我们可以将上面的最后两行代码合并：
+```go
+    return &File{fd, name, nil, 0}
+```
+*compposite leteral*的字段必须按顺序全部列出。但如果以`field:value`的形式明确地标出元素，初始化字段时就可以按任何顺序出现，未给出的字段值将赋0值，因此有如下形式：
+```go
+return &File{fd: fd, name: name}
+```
+少数情况下，如果*composite literal*不包含任何字段，它将创建该类型的零值。表达式`mew(File)`和`&File{}`是等价的。
+*composite literal*同样可用于创建数组、切片及映射，字段标签是索引还是映射的键则根据最使用的情况确定。在下例初始化过程中，无论Enone, Eio和Einval的值是什么，只要他们的标签不同就行。
+
+```go
+a := [...]string   {Enone: "no error", Eio: "Eio", Einval: "invalid argument"}
+s := []string      {Enone: "no error", Eio: "Eio", Einval: "invalid argument"}
+m := map[int]string{Enone: "no error", Eio: "Eio", Einval: "invalid argument"}
+```
+
+## 8.3 allocation with make
+内置函数`make(T, args)`的使用目的与`new(T)`不同。make仅用于slices,maps,channels 。 并返回一个类型为T(不是*T)的初始化值(不是零值)。造成这种使用差异的原因是这三种类型的底层引用数据结构要求在使用前必须初始化。以slice为例，它需要三个元素来描述：一个指向数据(内部是一个数组)的指针,长度，和容量。且在这写元素初始化前，这个slice是*nil*。对于slices,maps, channels，`make`初始化了其内部的底层数据结构，并准备了用于使用的值。例如：
+```go
+make([]int, 10, 100)
+```
+分配了一个包含100个整数空间的数组，接着创建了一个长度为10，容量为100，指针指向底层数组前10个元素的slice结构。(当使用make创建slice的时候，容量参数可以省略，详情参考slice部分)。相反，`new([]int)`返回一个指向新分配的，已置零的切片结构，即一个值为nil的slice的指针。下面的实例演示了make和new的区别：
+
+```go
+var p *[]int = new([]int)       // allocates slice structure; *p == nil; rarely useful
+var v  []int = make([]int, 100) // the slice v now refers to a new array of 100 ints
+
+// Unnecessarily complex:
+var p *[]int = new([]int)
+*p = make([]int, 100, 100)
+
+// Idiomatic:
+v := make([]int, 100)
+```
+必须记住的是，make仅适用于slice，maps， channels，且不返回指针。为了获取显示的指针，使用new，或者显式的使用变量的地址。
+
+## 8.4 Arrays
+在规划内存的详细布局时，数组是很有用的，有时它能帮助避免内存再次分配。但更重要的是数组是构建slice的基础。
 
 
 
